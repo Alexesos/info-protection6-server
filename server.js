@@ -45,6 +45,25 @@ const gcd = (a, b) => {
     return a;
 }
 
+const extendedGcd = (a, b) => {
+    let [oldR, r] = [BigInt(a), BigInt(b)];
+    let [oldS, s] = [1n, 0n];
+    let [oldT, t] = [0n, 1n];
+
+    while (r !== 0n) {
+        const quotient = oldR / r;
+        [oldR, r] = [r, oldR - quotient * r];
+        [oldS, s] = [s, oldS - quotient * s];
+        [oldT, t] = [t, oldT - quotient * t];
+    }
+
+    return {
+        gcd: oldR,
+        x: oldS,
+        y: oldT
+    };
+};
+
 // const findCoprime = (n) => {
 //     if (n === 1) return 2;
     
@@ -106,29 +125,29 @@ app.post('/api/encode', (req, res) => {
 
 // Here
 app.post('/api/decode', (req, res) => {
-    console.log('\n-----Decode Call-----\n');
+    console.log(`\n-----Decode Call-----\n`);
     const { message, d, m, n1 } = req.body;
-    console.log(`Props - message: ${m}, private key: ${d}, m: ${m}, n1: ${n1}`);
     const binaryArray = [];
 
-    console.log(`Decode: ${message}, ${d}, ${m}, ${n1}`);
+    console.log(`Params - text: ${message}, d: ${d}, m: ${m}, n1: ${n1}`);
 
     for (let i = 0; i < message.length; i++) {
-        const sum = (Number(message[i]) * Number(n1)) % Number(m);
-        console.log(`Sum: ${sum}`);
+        const sum = Number((BigInt(message[i]) * BigInt(n1)) % BigInt(m));
+        console.log(`sum: C[${i}] * n-1 mod m = ${message[i]} * ${n1} % ${m} = ${sum}`);
+
         const tempBites = [0, 0, 0, 0, 0, 0, 0, 0];
+        const positions = findIndicesWithSum(d, sum);
 
-        const positions = findIndicesWithSum(d, sum); 
+        if (positions.length > 0) {
+            positions[0].forEach(index => {
+                tempBites[index] = 1;
+            });
+        }
 
-        positions.map(position => {
-            console.log(`Position: `, position);
-            position.map(index => tempBites[index] = 1);
-        });
+        console.log(`Positions: `, tempBites);
 
         binaryArray.push(tempBites.join(''));
     }
-
-    console.log(binaryArray);
 
     const bytes = binaryArray.map(binStr => parseInt(binStr, 2));
     const buffer = Buffer.from(bytes);
@@ -188,7 +207,30 @@ app.post('/api/props/n', (req, res) => {
 });
 
 app.post('/api/props/n-1', (req, res) => {
+    console.log('N-1 Call');
     const { n, m } = req.body;
+    console.log(`n: ${n}, m: ${m}`);
+    
+    const a = BigInt(n);
+    const b = BigInt(m);
+        
+    const { gcd, x } = extendedGcd(a, b);
+
+    if (gcd !== 1n) {
+        return res.status(400).json({ 
+            error: `Inverse does not exist (gcd(${n}, ${m}) = ${gcd}` 
+        });
+    }
+
+    let inverse = BigInt(x) % b;
+    if (inverse < 0n) {
+        inverse += b;
+    }
+
+    const check = (a * inverse) % b;
+    console.log(`Проверка: ${a} * ${inverse} ≡ ${check} mod ${b}`);
+    
+    res.json({ result: inverse.toString() });
 });
 
 app.listen(PORT, () => {
